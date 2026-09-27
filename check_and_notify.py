@@ -8,6 +8,7 @@
 
 import json
 import os
+import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -93,7 +94,16 @@ def send_discord_message(headline: str, text: str, link_url: str) -> None:
             }
         ],
     }
-    resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
+    for attempt in range(5):
+        resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=15)
+        if resp.status_code == 429:
+            # 디스코드 레이트리밋: 서버가 알려준 만큼 기다렸다가 재시도
+            retry_after = resp.json().get("retry_after", 2)
+            print(f"디스코드 레이트리밋, {retry_after}초 대기 후 재시도")
+            time.sleep(float(retry_after) + 0.5)
+            continue
+        resp.raise_for_status()
+        return
     resp.raise_for_status()
 
 
@@ -114,10 +124,24 @@ def save_daily_report_file(post: dict) -> None:
 
 
 def main() -> None:
+    is_first_run = not STATE_PATH.exists()
     state = load_state()
     last_seen_id = state.get("last_seen_id", 0)
 
     posts = fetch_latest_posts()
+    if not posts:
+        print("가져온 글이 없음")
+        return
+
+    if is_first_run:
+        # 최초 실행: 지금까지 쌓여있던 과거 글을 한꺼번에 디스코드로 쏟아내지 않고,
+        # 현재 가장 최신 글 번호를 기준점으로만 잡는다. 그 이후에 올라오는 글부터 알림이 간다.
+        latest_id = posts[-1]["id"]
+        state["last_seen_id"] = latest_id
+        save_state(state)
+        print(f"최초 실행: 기준점을 글 {latest_id}번으로 설정. 다음 새 글부터 알림/저장됩니다.")
+        return
+
     new_posts = [p for p in posts if p["id"] > last_seen_id]
 
     if not new_posts:
@@ -130,6 +154,7 @@ def main() -> None:
         save_daily_report_file(post)
         state["last_seen_id"] = post["id"]
         save_state(state)
+        time.sleep(1.5)  # 디스코드 레이트리밋 예방을 위한 간격
 
 
 if __name__ == "__main__":
