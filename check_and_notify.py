@@ -8,6 +8,7 @@
 
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -63,7 +64,13 @@ def fetch_latest_posts() -> list[dict]:
             # 텍스트 없는 글(사진만 있는 글 등)은 건너뜀
             continue
 
-        text = text_div.get_text(separator="\n").strip()
+        # <br> 태그를 실제 줄바꿈 문자로 바꿔서 원문의 단락 구분(빈 줄 포함)을 그대로 살린다.
+        # get_text(separator=...)는 <br>이 연속으로 와도 구분자를 한 번만 넣어서
+        # 원문에서 빈 줄로 나뉘어 있던 단락이 붙어버리는 문제가 있었다.
+        for br in text_div.find_all("br"):
+            br.replace_with("\n")
+        text = text_div.get_text()
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()  # 과도한 빈 줄만 2개로 정리
         if not text:
             continue
 
