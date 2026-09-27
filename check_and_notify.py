@@ -80,7 +80,11 @@ def fetch_latest_posts() -> list[dict]:
 
 def send_discord_message(headline: str, text: str, link_url: str) -> None:
     """디스코드 웹훅으로 [제목 + 본문 미리보기 + 원문 링크] 임베드 메시지를 보낸다."""
-    preview = text if len(text) <= 1500 else text[:1500] + "\n...(생략, 아래 링크에서 전문 확인)"
+    # 디스코드 임베드 description 실제 한도는 4096자. 링크 문구가 붙을 자리를 감안해 여유를 둔다.
+    MAX_PREVIEW = 3800
+    body = text if len(text) <= MAX_PREVIEW else text[:MAX_PREVIEW] + "\n...(이하 생략)"
+    link_line = f"[📱 텔레그램에서 전문 보기]({link_url})"
+    preview = f"{body}\n\n{link_line}"
 
     payload = {
         "username": "한지영 알림봇",
