@@ -134,7 +134,25 @@ def save_daily_report_file(post: dict) -> None:
         file_path.write_text(f"# {today_str} 한지영 키움증권\n\n{entry}", encoding="utf-8")
 
 
-def main() -> None:
+def refresh_latest_file() -> None:
+    """가장 최근 날짜의 리포트 파일을 reports/hanjiyoung/latest.md 로 복사해 둔다.
+
+    무인 예약 실행에서는 프롬프트에 글자 그대로 적힌 URL만 승인 없이 열 수 있어서,
+    날짜가 매일 바뀌는 URL 대신 항상 같은 주소로 읽을 수 있는 파일을 따로 둔다.
+    (파일 첫 줄의 '# YYYY-MM-DD' 헤더로 어느 날짜 글인지 구분할 수 있다.)
+    """
+    reports_dir = Path(__file__).parent / "reports" / "hanjiyoung"
+    daily_files = sorted(reports_dir.glob("20??-??-??.md"))
+    if not daily_files:
+        return
+    latest_text = daily_files[-1].read_text(encoding="utf-8")
+    latest_path = reports_dir / "latest.md"
+    if not latest_path.exists() or latest_path.read_text(encoding="utf-8") != latest_text:
+        latest_path.write_text(latest_text, encoding="utf-8")
+        print(f"latest.md 갱신: {daily_files[-1].name}")
+
+
+def run() -> None:
     is_first_run = not STATE_PATH.exists()
     state = load_state()
     last_seen_id = state.get("last_seen_id", 0)
@@ -166,6 +184,14 @@ def main() -> None:
         state["last_seen_id"] = post["id"]
         save_state(state)
         time.sleep(1.5)  # 디스코드 레이트리밋 예방을 위한 간격
+
+
+def main() -> None:
+    try:
+        run()
+    finally:
+        # 새 글이 없거나 중간에 오류가 나도 latest.md는 항상 최신 상태로 맞춰 둔다.
+        refresh_latest_file()
 
 
 if __name__ == "__main__":
